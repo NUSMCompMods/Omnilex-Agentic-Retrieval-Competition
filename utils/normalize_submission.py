@@ -15,6 +15,8 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from omnilex.citations.normalizer import CitationNormalizer
+from omnilex.evaluation import write_submission_csv
+from omnilex.evaluation.submission_io import read_csv_preserve_empty_strings
 
 
 def normalize_submission(
@@ -24,7 +26,7 @@ def normalize_submission(
 ) -> tuple[int, int]:
     """Normalize predicted citations and write the cleaned CSV."""
 
-    df = pd.read_csv(input_path)
+    df = read_csv_preserve_empty_strings(input_path)
 
     required_cols = {"query_id", "predicted_citations"}
     missing = required_cols - set(df.columns)
@@ -44,8 +46,7 @@ def normalize_submission(
         normalized_rows.append(citation_separator.join(canonical_citations))
 
     df["predicted_citations"] = normalized_rows
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(output_path, index=False)
+    write_submission_csv(df, output_path)
 
     return raw_total, normalized_total
 
