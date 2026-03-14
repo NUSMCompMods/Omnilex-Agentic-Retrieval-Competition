@@ -1,10 +1,8 @@
-"""LLM loading utilities for llama-cpp-python.
-
-Supports both local development and Kaggle notebook environments.
-"""
+"""LLM loading utilities for local and Modal-backed inference."""
 
 import os
 from pathlib import Path
+from typing import Any
 
 # Type hint for Llama (actual import happens at runtime)
 try:
@@ -123,8 +121,11 @@ def load_model(
     n_threads: int | None = None,
     n_gpu_layers: int | None = None,
     verbose: bool = False,
+    backend: str | None = None,
+    modal_app_name: str | None = None,
+    modal_class_name: str | None = None,
     **kwargs,
-) -> "Llama":
+) -> Any:
     """Load a GGUF model using llama-cpp-python.
 
     Args:
@@ -137,15 +138,42 @@ def load_model(
                      -1 = offload all layers to GPU
                      0 = CPU only
         verbose: Whether to print llama.cpp logs
-        **kwargs: Additional arguments passed to Llama()
+        backend: Execution backend. `local` uses llama-cpp-python in-process.
+                 `modal` forwards inference to a deployed Modal L40S container.
+                 If None, reads `OMNILEX_LLM_BACKEND` and falls back to `local`.
+        modal_app_name: Override the deployed Modal app name.
+        modal_class_name: Override the deployed Modal class name.
+        **kwargs: Additional arguments passed to the model constructor
 
     Returns:
-        Loaded Llama model instance
+        Loaded local model instance or Modal proxy object
 
     Raises:
         ImportError: If llama-cpp-python is not installed
         FileNotFoundError: If model file not found
     """
+    selected_backend = (backend or os.environ.get("OMNILEX_LLM_BACKEND", "local")).lower()
+
+    if selected_backend == "modal":
+        from .modal_backend import ModalLlamaProxy
+
+        resolved_n_gpu_layers = -1 if n_gpu_layers is None else n_gpu_layers
+        return ModalLlamaProxy(
+            model_path=model_path,
+            n_ctx=n_ctx,
+            n_threads=n_threads,
+            n_gpu_layers=resolved_n_gpu_layers,
+            verbose=verbose,
+            app_name=modal_app_name,
+            class_name=modal_class_name,
+            model_kwargs=kwargs,
+        )
+
+    if selected_backend != "local":
+        raise ValueError(
+            f"Unsupported backend {selected_backend!r}. Expected one of: local, modal."
+        )
+
     if Llama is None:
         raise ImportError(
             "llama-cpp-python is required. Install with: pip install llama-cpp-python"
@@ -194,7 +222,7 @@ def load_model(
 
 
 def generate(
-    llm: "Llama",
+    llm: Any,
     prompt: str,
     max_tokens: int = 512,
     temperature: float = 0.1,
@@ -225,11 +253,11 @@ def generate(
     return response["choices"][0]["text"]
 
 
-def count_tokens(llm: "Llama", text: str) -> int:
+def count_tokens(llm: Any, text: str) -> int:
     """Count tokens in a text string.
 
     Args:
-        llm: Loaded Llama model (for tokenizer)
+        llm: Loaded Llama model or Modal proxy (for tokenizer)
         text: Text to tokenize
 
     Returns:

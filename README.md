@@ -50,6 +50,64 @@ Both notebooks work in VSCode and can be submitted to Kaggle.
 python scripts/validate_submission.py submission.csv
 ```
 
+### Optional: Run Inference On Modal GPU
+
+`omnilex.llm.load_model()` can call a deployed Modal `L40S` backend instead of the local `llama-cpp-python` runtime.
+
+```bash
+# 1. Activate the repo environment
+source .venv/bin/activate
+
+# 2. Export your Modal credentials from .env for CLI commands
+set -a
+source .env
+set +a
+
+# 3. Verify local authentication
+modal token info
+
+# 4. Upload your GGUF file into the Modal volume
+python scripts/upload_modal_model.py models/mistral-7b-instruct-v0.2.Q4_K_M.gguf
+
+# 5. Deploy the remote L40S backend once
+modal deploy src/omnilex/llm/modal_backend.py
+```
+
+After that, local Python can switch to the remote backend:
+
+```python
+from omnilex.llm import generate, load_model
+
+llm = load_model(
+    model_path="models/mistral-7b-instruct-v0.2.Q4_K_M.gguf",
+    backend="modal",
+    n_ctx=4096,
+    chat_format="mistral-instruct",
+)
+
+response = generate(llm, "Name one famous Swiss legal code.", max_tokens=64)
+print(response)
+```
+
+If you want existing code to switch without editing each `load_model(...)` call, set:
+
+```bash
+export OMNILEX_LLM_BACKEND=modal
+```
+
+Notes:
+
+- `load_model(..., backend="modal")` returns a proxy object that forwards calls to a deployed Modal class named `RemoteLlama` in the `omnilex-remote-llm` app.
+- The proxy auto-loads `MODAL_TOKEN_ID` and `MODAL_TOKEN_SECRET` from `.env` when they are not already present in the current Python process.
+- The Modal backend expects the model file to exist in the `omnilex-llm-models` volume under `/models/<filename>`.
+- The remote image installs `llama-cpp-python==0.3.16` with CUDA support for the `L40S`.
+
+For a quick GPU connectivity check before deploying the full backend:
+
+```bash
+modal run scripts/modal_gpu_check.py
+```
+
 ## Data Format
 
 See Kaggle
