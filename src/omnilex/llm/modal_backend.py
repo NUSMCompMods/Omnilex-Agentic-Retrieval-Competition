@@ -35,7 +35,21 @@ MODAL_IMAGE_TAG = "nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04"
 LLAMA_CPP_VERSION = "0.3.16"
 LLAMA_CPP_CUDA_WHEEL = "https://abetlen.github.io/llama-cpp-python/whl/cu124"
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+
+def _resolve_repo_root(module_path: Path | None = None) -> Path:
+    """Resolve the repo root for both local src-layout imports and Modal file deploys."""
+
+    module_path = (module_path or Path(__file__)).resolve()
+
+    for candidate in (module_path.parent, *module_path.parents):
+        if (candidate / "pyproject.toml").exists() or (candidate / ".git").exists():
+            return candidate
+
+    # Modal deploy may flatten the module to `/root/modal_backend.py` with no repo markers.
+    return module_path.parent
+
+
+REPO_ROOT = _resolve_repo_root()
 
 
 def _find_model_file(model_dir: Path, pattern: str = "*.gguf") -> Path | None:
@@ -198,6 +212,18 @@ class ModalLlamaProxy:
         return self._remote.tokenize.remote(text)
 
     def metadata(self) -> dict[str, Any]:
+        return {
+            "backend": "modal",
+            "gpu": MODAL_GPU,
+            "app_name": self.app_name,
+            "class_name": self.class_name,
+            "model_path": self.model_path,
+            "n_ctx": self.n_ctx,
+            "n_threads": self.n_threads,
+            "n_gpu_layers": self.n_gpu_layers,
+        }
+
+    def remote_metadata(self) -> dict[str, Any]:
         return self._remote.metadata.remote()
 
 

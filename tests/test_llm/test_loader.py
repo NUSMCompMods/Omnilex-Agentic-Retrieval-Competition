@@ -75,6 +75,25 @@ class TestLlamaImport:
 class TestModalBackend:
     """Test Modal dispatch logic without calling the real API."""
 
+    def test_resolve_repo_root_handles_src_layout(self, tmp_path):
+        from omnilex.llm import modal_backend
+
+        repo_root = tmp_path / "repo"
+        module_path = repo_root / "src" / "omnilex" / "llm" / "modal_backend.py"
+        module_path.parent.mkdir(parents=True)
+        module_path.write_text("# stub")
+        (repo_root / "pyproject.toml").write_text("[project]\nname='stub'\n")
+
+        assert modal_backend._resolve_repo_root(module_path) == repo_root
+
+    def test_resolve_repo_root_handles_modal_flattened_file(self, tmp_path):
+        from omnilex.llm import modal_backend
+
+        module_path = tmp_path / "modal_backend.py"
+        module_path.write_text("# stub")
+
+        assert modal_backend._resolve_repo_root(module_path) == tmp_path
+
     def test_load_model_modal_returns_proxy(self, monkeypatch, tmp_path):
         from omnilex.llm import load_model
         from omnilex.llm import modal_backend
@@ -141,6 +160,8 @@ class TestModalBackend:
 
         assert generate(llm, "hello") == "remote text"
         assert count_tokens(llm, "hello") == 3
+        assert llm.metadata()["app_name"] == "test-app"
+        assert llm.metadata()["gpu"] == modal_backend.MODAL_GPU
         assert captured["prompt"] == "hello"
         assert captured["tokenize_payload"] == b"hello"
 
