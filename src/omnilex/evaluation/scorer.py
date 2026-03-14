@@ -6,6 +6,7 @@ import pandas as pd
 
 from ..citations.normalizer import CitationNormalizer
 from .metrics import macro_f1, mean_average_precision, micro_f1
+from .submission_io import read_csv_preserve_empty_strings
 
 
 class Scorer:
@@ -45,7 +46,7 @@ class Scorer:
         if not submission_path.exists():
             raise ValueError(f"Submission file not found: {submission_path}")
 
-        df = pd.read_csv(submission_path)
+        df = read_csv_preserve_empty_strings(submission_path)
 
         # Validate required columns
         required_cols = {"query_id", "predicted_citations"}
@@ -72,7 +73,7 @@ class Scorer:
         if not gold_path.exists():
             raise ValueError(f"Gold file not found: {gold_path}")
 
-        df = pd.read_csv(gold_path)
+        df = read_csv_preserve_empty_strings(gold_path)
 
         # Validate required columns
         required_cols = {"query_id", "gold_citations"}
@@ -245,7 +246,7 @@ def validate_submission_format(submission_path: Path | str) -> list[str]:
 
     # Try to load
     try:
-        df = pd.read_csv(submission_path)
+        df = read_csv_preserve_empty_strings(submission_path)
     except Exception as e:
         return [f"Failed to parse CSV: {e}"]
 
