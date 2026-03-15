@@ -9,6 +9,7 @@ llama-cpp-python>=0.2.0
 
 # Retrieval
 rank-bm25>=0.2.2
+sentence-transformers>=3.0.0
 
 # Data
 datasets>=2.14.0

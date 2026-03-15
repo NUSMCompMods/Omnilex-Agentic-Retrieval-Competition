@@ -39,7 +39,7 @@ Two baseline notebooks are provided:
    - Simple but prone to hallucination
 
 2. **Agentic Retrieval** (`notebooks/02_agentic_retrieval_baseline.ipynb`)
-   - Uses ReAct-style agent with search tools
+   - Uses ReAct-style agent with semantic search + reranking tools
    - Grounded in actual legal documents
 
 Both notebooks work in VSCode and can be submitted to Kaggle.
@@ -118,7 +118,7 @@ See Kaggle
 ├── src/omnilex/           # Core library
 │   ├── citations/         # Citation parsing & normalization
 │   ├── evaluation/        # Metrics & scoring
-│   ├── retrieval/         # BM25 search & tools
+│   ├── retrieval/         # Semantic search, reranking, and BM25 compatibility
 │   └── llm/               # LLM loading & prompts
 ├── notebooks/             # Baseline notebooks
 ├── utils/                 # Data & utility scripts
@@ -130,13 +130,14 @@ See Kaggle
 
 - Python >= 3.10
 - llama-cpp-python (for local LLM inference)
-- rank-bm25 (for keyword search)
+- sentence-transformers (for semantic retrieval + reranking; installs the transformer backend)
+- rank-bm25 (kept for debugging and backwards compatibility)
 - pandas, numpy, scikit-learn
 
 For Kaggle submissions, you may need to (depending on your solution):
 
 1. Upload your GGUF model as a Kaggle dataset
-2. Upload pre-built indices as a Kaggle dataset
+2. Upload pre-built semantic indices as a Kaggle dataset
 3. Package the `omnilex` library
 
 ## License

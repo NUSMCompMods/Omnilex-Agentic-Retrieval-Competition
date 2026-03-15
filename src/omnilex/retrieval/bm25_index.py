@@ -127,6 +127,7 @@ class BM25Index:
         path.parent.mkdir(parents=True, exist_ok=True)
 
         data = {
+            "index_type": "bm25",
             "documents": self.documents,
             "tokenized_corpus": self._tokenized_corpus,
             "text_field": self.text_field,
@@ -151,6 +152,11 @@ class BM25Index:
         with open(path, "rb") as f:
             data = pickle.load(f)
 
+        return cls.from_serialized_data(data)
+
+    @classmethod
+    def from_serialized_data(cls, data: dict) -> "BM25Index":
+        """Construct a BM25 index from serialized data."""
         instance = cls(
             text_field=data["text_field"],
             citation_field=data.get("citation_field", "citation"),

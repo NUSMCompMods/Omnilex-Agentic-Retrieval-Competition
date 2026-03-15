@@ -66,11 +66,11 @@ Liste nur die Zitate auf, eines pro Zeile:"""
 AGENT_SYSTEM_PROMPT = """\
 You are a Swiss legal research assistant with access to two search tools:
 
-1. search_laws(query): Search Swiss federal laws by keywords
+1. search_laws(query): Search Swiss federal laws semantically
    - Returns relevant law provisions with citations and text excerpts
    - Use for finding statutory law: codes, acts, ordinances
 
-2. search_courts(query): Search Swiss Federal Court decisions by keywords
+2. search_courts(query): Search Swiss Federal Court decisions semantically
    - Returns relevant case law with citations and excerpts
    - Use for finding judicial interpretations and precedents
 
