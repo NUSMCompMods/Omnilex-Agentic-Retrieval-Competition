@@ -5,6 +5,7 @@ Contains prompts for:
 2. Agentic retrieval baseline - ReAct-style agent with search tools
 """
 
+import json
 import re
 
 # =============================================================================
@@ -82,7 +83,8 @@ Citation formats:
 
 Instructions:
 - Search BOTH laws AND court decisions for comprehensive results
-- Use multiple search queries if needed (different terms, German/English)
+- The search tools already expand each query across English and German
+- Use follow-up search queries for different legal concepts or sub-issues
 - Extract citations in standard format
 - Continue searching until you have found all relevant sources
 
@@ -143,6 +145,35 @@ List each citation on a separate line. Only output the citations, nothing else:"
 
 
 # =============================================================================
+# QUERY EXPANSION PROMPTS
+# =============================================================================
+
+QUERY_EXPANSION_PROMPT = """\
+You expand Swiss legal retrieval queries for BM25 keyword search.
+
+Return valid JSON only with this exact schema:
+{{
+  "queries": [
+    {{"language": "en", "query": "keyword style rewrite"}},
+    {{"language": "de", "query": "keyword style rewrite"}}
+  ]
+}}
+
+Rules:
+- Use only these languages and limits:
+{language_instructions}
+- Keep queries short, concrete, and keyword-focused.
+- Preserve Swiss legal abbreviations exactly when present, such as OR, ZGB, StGB, BV.
+- Prefer legal concepts and synonyms over full natural-language sentences.
+- Do not add explanations, markdown, citations, or extra keys.
+- Do not repeat the original query verbatim unless it is genuinely the best rewrite.
+
+Original query:
+{query}
+"""
+
+
+# =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
 
@@ -160,6 +191,28 @@ def format_direct_generation_prompt(query: str, language: str = "en") -> str:
     if language == "de":
         return DIRECT_GENERATION_PROMPT_DE.format(query=query)
     return DIRECT_GENERATION_PROMPT.format(query=query)
+
+
+def format_query_expansion_prompt(query: str, language_counts: dict[str, int]) -> str:
+    """Format the multilingual query expansion prompt.
+
+    Args:
+        query: Original user query
+        language_counts: Mapping of language code to requested rewrite count
+
+    Returns:
+        Prompt asking the LLM for strict JSON query rewrites
+    """
+    language_lines = [
+        f'- "{language}": up to {count} rewrite(s)'
+        for language, count in language_counts.items()
+        if count > 0
+    ]
+    language_instructions = "\n".join(language_lines) or '- "en": up to 0 rewrite(s)'
+    return QUERY_EXPANSION_PROMPT.format(
+        query=query,
+        language_instructions=language_instructions,
+    )
 
 
 def format_agent_prompt(query: str, tools_description: str = "") -> str:
@@ -207,6 +260,62 @@ def parse_citations_from_output(output: str) -> list[str]:
     return citations
 
 
+def parse_query_expansion_output(
+    output: str,
+    allowed_languages: set[str] | None = None,
+) -> list[dict[str, str]]:
+    """Parse strict-JSON query expansion output.
+
+    Args:
+        output: Raw model text containing JSON
+        allowed_languages: Optional filter for allowed language codes
+
+    Returns:
+        Ordered list of {"language": ..., "query": ...} objects
+
+    Raises:
+        ValueError: If no JSON object/array can be parsed
+    """
+    json_text = _extract_json_block(output)
+    payload = json.loads(json_text)
+
+    if isinstance(payload, dict):
+        entries = payload.get("queries", [])
+    elif isinstance(payload, list):
+        entries = payload
+    else:
+        raise ValueError("Expected a JSON object or array for query expansion output")
+
+    normalized_entries: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+
+        raw_language = entry.get("language")
+        raw_query = entry.get("query")
+        if raw_language is None or raw_query is None:
+            continue
+
+        language = str(raw_language).strip().lower()
+        query = _normalize_query_text(str(raw_query))
+
+        if not language or not query:
+            continue
+        if allowed_languages and language not in allowed_languages:
+            continue
+
+        dedupe_key = (language, query.casefold())
+        if dedupe_key in seen:
+            continue
+
+        normalized_entries.append({"language": language, "query": query})
+        seen.add(dedupe_key)
+
+    return normalized_entries
+
+
 def parse_agent_action(response: str) -> tuple[str, str] | None:
     """Parse action and input from agent response.
 
@@ -243,3 +352,29 @@ def extract_final_answer(response: str) -> str | None:
         return match.group(1).strip()
 
     return None
+
+
+def _extract_json_block(output: str) -> str:
+    """Extract the first JSON object or array from model output."""
+    cleaned = output.strip()
+
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+        cleaned = cleaned.strip()
+
+    start_positions = [(cleaned.find("{"), "{", "}"), (cleaned.find("["), "[", "]")]
+    start_positions = [item for item in start_positions if item[0] != -1]
+
+    if start_positions:
+        start, opener, closer = min(start_positions, key=lambda item: item[0])
+        end = cleaned.rfind(closer)
+        if end != -1 and end > start:
+            return cleaned[start : end + 1]
+
+    raise ValueError("Could not find JSON object or array in query expansion output")
+
+
+def _normalize_query_text(text: str) -> str:
+    """Normalize whitespace in generated query text."""
+    return " ".join(text.split())
